@@ -86,13 +86,14 @@
       <button id="start-btn" onclick="startTraining()">開始訓練</button>
     </div>
     <div id="connection-status"></div>
+    <div id="model-list-status" style="font-size:12px;color:#6b7280;margin-top:4px;line-height:1.45"></div>
   </div>
 
   <div id="chat-window">
     <div class="message bot">
       <strong>系統提示：</strong>歡迎來到成交訓練場。<br>
       請先在上方輸入 API Key。系統會即時讀取目前可用的 Gemini 文字模型；
-      若某個模型遇到 429、5xx、404、空回應等可切換錯誤，會自動改用下一個候選模型。
+      每一次送出訊息前都會重新呼叫 Gemini models.list，並依 Google 當次回傳順序逐一呼叫 generateContent；前一個模型失敗或逾時就自動換下一個。
     </div>
   </div>
 
@@ -107,7 +108,7 @@
 "use strict";
 
 const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const REQUEST_TIMEOUT_MS = 30000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 let apiKey = "";
 let modelQueue = [];
@@ -227,7 +228,9 @@ async function fetchWithTimeout(url, options={}) {
     return await fetch(url, {...options, signal: controller.signal});
   } catch (err) {
     if (err && err.name === "AbortError") {
-      throw new Error(`請求逾時（>${REQUEST_TIMEOUT_MS/1000} 秒）`);
+      const e = new Error(`請求逾時（>${REQUEST_TIMEOUT_MS/1000} 秒）`);
+      e.isTimeout = true;
+      throw e;
     }
     throw err;
   } finally {
@@ -255,35 +258,23 @@ function isUsableTextModel(model) {
   return name.includes("gemini");
 }
 
-function modelScore(model) {
-  const n = cleanModelName(model.name).toLowerCase();
-  let score = 0;
-
-  // Prefer normal conversational Flash models.
-  if (n.includes("flash")) score += 1000;
-  if (n.includes("flash-lite")) score -= 80;
-  if (n.includes("pro")) score += 500;
-
-  // Prefer stable/general models over preview/experimental/live variants.
-  if (n.includes("preview")) score -= 250;
-  if (n.includes("experimental") || /(^|-)exp($|-)/.test(n)) score -= 350;
-  if (n.includes("latest")) score += 60;
-
-  // Soft preference for newer version-looking names.
-  const nums = n.match(/\d+(?:\.\d+)?/g);
-  if (nums?.length) {
-    const last = Number(nums[nums.length - 1]);
-    if (Number.isFinite(last)) score += Math.min(last * 10, 100);
+function renderFetchedModels(models) {
+  const el = document.getElementById("model-list-status");
+  if (!el) return;
+  if (!models.length) {
+    el.textContent = "Gemini models.list 未回傳可用文字模型。";
+    return;
   }
-  return score;
+  const names = models.map(m => cleanModelName(m.name));
+  el.textContent = `本次即時 models.list：${names.join(" → ")}`;
 }
 
 async function loadAvailableModels() {
   const all = [];
   let pageToken = "";
 
-  // Fetch all pages, capped to avoid accidental infinite pagination.
-  for (let page=0; page<10; page++) {
+  // 每次真的呼叫 Gemini models.list，不使用內建模型名稱清單。
+  for (let page = 0; page < 20; page++) {
     const params = new URLSearchParams({ pageSize: "1000" });
     if (pageToken) params.set("pageToken", pageToken);
 
@@ -293,34 +284,47 @@ async function loadAvailableModels() {
     });
 
     const data = await safeJson(resp);
-
-    if (!resp.ok) {
-      throw makeApiError(resp, data, "讀取模型清單失敗");
-    }
+    if (!resp.ok) throw makeApiError(resp, data, "讀取 models.list 失敗");
 
     if (Array.isArray(data.models)) all.push(...data.models);
     pageToken = data.nextPageToken || "";
     if (!pageToken) break;
   }
 
-  const usable = all
-    .filter(isUsableTextModel)
-    .sort((a,b) => modelScore(b) - modelScore(a));
-
-  // Deduplicate model resource names.
+  // 只依 Google 回傳的 supportedGenerationMethods 判斷能否 generateContent。
+  // 不用寫死 gemini-3.x / gemini-2.x 等候選模型名稱，也不做版本排序。
   const seen = new Set();
-  modelQueue = usable.filter(m => {
-    if (!m.name || seen.has(m.name)) return false;
+  const usable = all.filter(m => {
+    if (!m?.name || seen.has(m.name)) return false;
     seen.add(m.name);
-    return true;
+
+    const methods = m.supportedGenerationMethods || [];
+    if (!methods.includes("generateContent")) return false;
+
+    // 排除名稱已明確表示不是一般文字聊天輸出的模型類型。
+    // 這不是候選清單；候選仍完全來自 models.list。
+    const n = cleanModelName(m.name).toLowerCase();
+    const clearlyNonChat = [
+      "embedding", "imagen", "veo", "lyria", "tts", "text-to-speech",
+      "audio", "live", "transcribe", "robotics", "computer-use",
+      "image-generation", "image-preview", "aqa"
+    ];
+    return !clearlyNonChat.some(x => n.includes(x));
   });
 
-  if (!modelQueue.length) {
-    throw new Error("此 API Key 沒有找到可用的 Gemini 文字 generateContent 模型。");
-  }
-
+  modelQueue = usable; // 保留 Google API 回傳順序，逐一嘗試。
   activeModelIndex = 0;
+  renderFetchedModels(modelQueue);
+
+  if (!modelQueue.length) {
+    throw new Error("models.list 有回應，但沒有找到支援 generateContent 的一般文字模型。");
+  }
   return modelQueue;
+}
+
+async function refreshAvailableModels() {
+  setConnectionStatus("正在即時重新查詢 Gemini models.list…");
+  return await loadAvailableModels();
 }
 
 async function safeJson(response) {
@@ -400,10 +404,13 @@ async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) 
       })
     });
   } catch (err) {
-    // Browser/network/CORS errors aren't model-specific.
-    const e = new Error(
-      `瀏覽器無法連到 Gemini API：${err.message || err}`
-    );
+    if (err?.isTimeout) {
+      // 單一模型逾時也要切下一個，而不是整次對話直接中止。
+      err.modelTimeout = true;
+      throw err;
+    }
+    // 非逾時的瀏覽器層錯誤（例如 CORS / DNS）通常不是換模型能解決。
+    const e = new Error(`瀏覽器無法連到 Gemini API：${err.message || err}`);
     e.networkError = true;
     throw e;
   }
@@ -428,44 +435,57 @@ async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) 
 }
 
 async function generateWithFailover(contents, purpose="生成回覆") {
-  if (!modelQueue.length) throw new Error("尚未載入可用模型。");
+  // 關鍵修正：每一次生成前都重新向 Gemini 查 models.list。
+  // 不沿用上一次啟動時的舊清單，也沒有寫死候選模型。
+  await refreshAvailableModels();
 
   const attempts = [];
-  const start = activeModelIndex;
 
-  // Try every candidate at most once for this request.
-  for (let offset=0; offset<modelQueue.length; offset++) {
-    const idx = (start + offset) % modelQueue.length;
+  // 嚴格按照這一次 models.list 的回傳順序逐一 generateContent。
+  for (let idx = 0; idx < modelQueue.length; idx++) {
     const model = modelQueue[idx];
     const modelName = cleanModelName(model.name);
 
     setConnectionStatus(
-      `${purpose}：正在嘗試 ${modelName}${offset ? `（已自動切換第 ${offset+1} 個模型）` : ""}…`,
-      offset ? "warn" : ""
+      `${purpose}：${idx + 1}/${modelQueue.length} 正在嘗試 ${modelName}…`,
+      idx ? "warn" : ""
     );
 
     try {
       const result = await callGenerateOnModel(model.name, contents);
       activeModelIndex = idx;
-      setConnectionStatus(`Gemini 已連線｜目前模型：${modelName}`, "ok");
-      return {...result, model: model.name};
+      setConnectionStatus(
+        `Gemini 已連線｜本次由 ${modelName} 成功回覆（第 ${idx + 1}/${modelQueue.length} 個）`,
+        "ok"
+      );
+      return {...result, model: model.name, attempts};
     } catch (err) {
       attempts.push({ model: modelName, err });
 
-      if (err.networkError) throw err;
-
-      const retryable = err.emptyText || isRetryableModelError(err);
-      if (!retryable) {
+      // API key / 權限錯誤是整個專案層級，沒有必要把所有模型都打一遍。
+      const authFailure = [401,403].includes(Number(err?.httpStatus || err?.apiCode || 0)) ||
+        ["UNAUTHENTICATED","PERMISSION_DENIED"].includes(String(err?.apiStatus || "").toUpperCase());
+      if (authFailure) {
         err.attempts = attempts;
         throw err;
       }
 
-      // Move immediately to next model on 503/429/404/5xx/empty output.
+      // 真正的瀏覽器網路/CORS/DNS錯誤停止；單一模型 timeout 不屬於此類。
+      if (err.networkError) {
+        err.attempts = attempts;
+        throw err;
+      }
+
+      // 其他任何模型層失敗（503/429/404/5xx/400能力不符/空文字/timeout）都直接換下一個。
+      setConnectionStatus(
+        `${modelName} 失敗：${err.message || "未知錯誤"}；自動切換下一個模型…`,
+        "warn"
+      );
       continue;
     }
   }
 
-  const e = new Error("所有候選 Gemini 文字模型都嘗試過，但目前都無法成功產生文字。");
+  const e = new Error("這一次 models.list 回傳的候選模型已全部逐一嘗試，但沒有任何模型成功回覆。");
   e.attempts = attempts;
   throw e;
 }
@@ -575,7 +595,7 @@ async function startTraining() {
     setConnectionStatus("正在取得 Gemini 可用模型清單…");
 
     const models = await loadAvailableModels();
-    setConnectionStatus(`找到 ${models.length} 個候選文字模型，正在建立隨機情境…`);
+    setConnectionStatus(`models.list 即時取得 ${models.length} 個候選模型；建立情境前會再重新查詢一次。`, "ok");
 
     const scenario = await createRandomScenario();
 
