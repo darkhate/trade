@@ -1,629 +1,633 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>成交溫度計：互動式成交訓練模擬器</title>
-    <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #app-container { width: 100%; max-width: 600px; height: 90vh; background: white; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); display: flex; flex-direction: column; overflow: hidden; }
-        #header { background: #2c3e50; color: white; padding: 15px 20px; text-align: center; font-weight: bold; font-size: 1.2rem; }
-        #api-panel { background: #ecf0f1; border-bottom: 1px solid #ddd; }
-        #api-setup { padding: 10px 20px 6px; display: flex; gap: 10px; }
-        #api-setup input { flex: 1; min-width: 0; padding: 8px; border: 1px solid #bdc3c7; border-radius: 4px; font-size: 14px; }
-        #connection-status { padding: 0 20px 9px; font-size: 12px; color: #607080; min-height: 18px; word-break: break-word; }
-        #connection-status.ok { color: #147a45; }
-        #connection-status.error { color: #b42318; }
-        #connection-status.loading { color: #6b7280; }
-        #chat-window { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 15px; background: #fafafa; }
-        .message { max-width: 85%; padding: 12px 16px; border-radius: 12px; line-height: 1.5; font-size: 15px; overflow-wrap: anywhere; }
-        .bot { background: #e8eaed; color: #1f2937; align-self: flex-start; border-top-left-radius: 2px; }
-        .user { background: #3498db; color: white; align-self: flex-end; border-top-right-radius: 2px; }
-        .system-status { font-size: 12px; color: #7f8c8d; margin-top: 5px; font-style: italic; }
-        .error-detail { margin-top: 8px; font-size: 12px; color: #8a1c1c; white-space: pre-wrap; }
-        #input-area { padding: 15px 20px; background: white; border-top: 1px solid #eee; display: flex; gap: 10px; }
-        #user-input { flex: 1; min-width: 0; padding: 12px; border: 1px solid #ddd; border-radius: 8px; font-size: 15px; outline: none; transition: border 0.3s; }
-        #user-input:focus { border-color: #3498db; }
-        button { background: #3498db; color: white; border: none; padding: 0 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
-        button:hover { background: #2980b9; }
-        button:disabled { background: #95a5a6; cursor: not-allowed; }
-        @media (max-width: 640px) {
-            #app-container { height: 100vh; max-width: none; border-radius: 0; }
-            #api-setup { padding-left: 12px; padding-right: 12px; }
-            #connection-status { padding-left: 12px; padding-right: 12px; }
-            #chat-window { padding: 14px; }
-            #input-area { padding: 12px; }
-        }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>成交溫度計：實戰對話訓練</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: "Segoe UI", "Noto Sans TC", Arial, sans-serif;
+      background:#f0f2f5; margin:0; min-height:100vh;
+      display:flex; justify-content:center; align-items:center;
+      color:#1f2937;
+    }
+    #app-container {
+      width:100%; max-width:760px; height:92vh; min-height:620px;
+      background:white; border-radius:12px; box-shadow:0 5px 18px rgba(0,0,0,.12);
+      display:flex; flex-direction:column; overflow:hidden;
+    }
+    #header {
+      background:#2c3e50; color:white; padding:18px 20px;
+      text-align:center; font-weight:800; font-size:1.35rem;
+    }
+    #api-setup {
+      background:#ecf0f1; padding:12px 20px 10px;
+      border-bottom:1px solid #d8dee3;
+    }
+    .api-row { display:flex; gap:12px; }
+    #api-key {
+      flex:1; min-width:0; padding:11px 12px;
+      border:1px solid #9ca3af; border-radius:7px; font-size:15px;
+    }
+    button {
+      background:#3498db; color:white; border:none; padding:0 24px;
+      border-radius:9px; font-weight:700; cursor:pointer; font-size:15px;
+    }
+    button:hover { background:#2980b9; }
+    button:disabled { background:#9aa9ae; cursor:not-allowed; }
+    #connection-status { min-height:22px; margin-top:7px; font-size:13px; }
+    .status-ok { color:#15803d; }
+    .status-warn { color:#b45309; }
+    .status-error { color:#c62828; }
+    #chat-window {
+      flex:1; padding:24px; overflow-y:auto; display:flex;
+      flex-direction:column; gap:18px; background:#fafafa;
+    }
+    .message {
+      max-width:88%; padding:14px 18px; border-radius:14px;
+      line-height:1.58; font-size:16px; white-space:normal;
+      overflow-wrap:anywhere;
+    }
+    .bot { background:#e8eaed; align-self:flex-start; border-top-left-radius:3px; }
+    .user { background:#3498db; color:white; align-self:flex-end; border-top-right-radius:3px; }
+    .system-status { font-size:13px; color:#6b7280; margin-top:6px; font-style:italic; }
+    .error-detail { color:#b91c1c; margin-top:8px; font-size:14px; }
+    .model-note { font-size:12px; color:#6b7280; margin-top:6px; }
+    #input-area {
+      padding:15px 20px; background:white; border-top:1px solid #eee;
+      display:flex; gap:10px;
+    }
+    #user-input {
+      flex:1; min-width:0; padding:12px; border:1px solid #d1d5db;
+      border-radius:8px; font-size:15px; outline:none;
+    }
+    #user-input:focus { border-color:#3498db; }
+    @media (max-width:640px) {
+      body { align-items:stretch; }
+      #app-container { height:100vh; min-height:0; border-radius:0; }
+      #header { font-size:1.15rem; }
+      #api-setup { padding:10px; }
+      .api-row { gap:8px; }
+      button { padding:0 18px; }
+      #chat-window { padding:14px; }
+      .message { max-width:94%; }
+      #input-area { padding:10px; }
+    }
+  </style>
 </head>
 <body>
-
 <div id="app-container">
-    <div id="header">成交溫度計：實戰對話訓練</div>
+  <div id="header">成交溫度計：實戰對話訓練</div>
 
-    <div id="api-panel">
-        <div id="api-setup">
-            <input type="password" id="api-key" placeholder="請貼上您的 Gemini API Key..." autocomplete="off" spellcheck="false">
-            <button onclick="startTraining()" id="start-btn">開始訓練</button>
-        </div>
-        <div id="connection-status">尚未連線 Gemini API</div>
+  <div id="api-setup">
+    <div class="api-row">
+      <input type="password" id="api-key" placeholder="請貼上 Gemini API Key..." autocomplete="off">
+      <button id="start-btn" onclick="startTraining()">開始訓練</button>
     </div>
+    <div id="connection-status"></div>
+  </div>
 
-    <div id="chat-window">
-        <div class="message bot">
-            <strong>系統提示：</strong>歡迎來到成交訓練場。<br>
-            請先在上方輸入 API Key。系統會自動選擇可用 Gemini 模型，並由 AI 即時產生不同的真實感成交情境與客戶問題。
-        </div>
+  <div id="chat-window">
+    <div class="message bot">
+      <strong>系統提示：</strong>歡迎來到成交訓練場。<br>
+      請先在上方輸入 API Key。系統會即時讀取目前可用的 Gemini 文字模型；
+      若某個模型遇到 429、5xx、404、空回應等可切換錯誤，會自動改用下一個候選模型。
     </div>
+  </div>
 
-    <div id="input-area">
-        <input type="text" id="user-input" placeholder="輸入您的回應..." disabled onkeydown="if(event.key === 'Enter' && !event.isComposing) sendMessage()">
-        <button id="send-btn" onclick="sendMessage()" disabled>發送</button>
-    </div>
+  <div id="input-area">
+    <input id="user-input" type="text" placeholder="輸入您的回應..." disabled
+      onkeydown="if(event.key==='Enter' && !event.isComposing) sendMessage()">
+    <button id="send-btn" onclick="sendMessage()" disabled>發送</button>
+  </div>
 </div>
 
 <script>
-    const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+"use strict";
 
-    function sanitizeApiKey(raw) {
-        let key = String(raw || "")
-            .trim()
-            .replace(/[\u200B-\u200D\uFEFF]/g, "")
-            .replace(/[\r\n\t ]+/g, "");
+const API_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const REQUEST_TIMEOUT_MS = 30000;
 
-        // 使用者從文件/聊天工具複製時，有時會一起帶入引號。
-        key = key.replace(/^["'`]+|["'`]+$/g, "");
+let apiKey = "";
+let modelQueue = [];
+let activeModelIndex = 0;
+let chatHistory = [];
+let scenarioSummary = "";
+let recentScenarioHints = [];
 
-        if (!key) {
-            throw new Error("API Key 為空白。請重新貼上 Gemini API Key。");
+const systemInstruction = `
+你是一個「互動式成交訓練模擬器」，扮演一位真實、有個性、有需求、有限制的潛在客戶。
+目的不是配合學員成交，而是模擬真實世界中的銷售對話。
+
+【成交階段】
+1. 防備
+2. 觀望
+3. 開放
+4. 共鳴
+5. 興奮
+6. 猶豫
+7. 確定
+
+【判斷原則：G.O.O.D.】
+Genuine：真誠，不使用制式話術壓迫客戶。
+Open：讓客戶感到有選擇權與安全感。
+Observe：能察覺並回應客戶真正的情緒與顧慮。
+Direction：能循序引導，而不是急著推銷。
+
+【互動規則】
+- 你必須維持同一位客戶、同一個購買情境與背景，不可中途換人或換產品。
+- 學員急著推銷、迴避疑慮、施壓時，客戶應自然防備或退回。
+- 學員有同理、探索需求、釐清問題、降低風險時，才逐步推進。
+- 客戶不能每句都稱讚學員，要像真實客戶一樣有自己的立場。
+- 每次只回應一個主要想法，避免一次丟出太多問題。
+- 每次回覆最後都加上：[當前階段：XXX / 成交指數：X/100]
+- 進入第 6 階段時，要根據此客戶的實際情境提出真實的最後疑慮，不要使用固定句型。
+- 只有真正達到第 7 階段才跳出角色，提供 G.O.O.D. 模型復盤與最終評分。
+`;
+
+function appendMessage(sender, text, {html=false} = {}) {
+  const chatWindow = document.getElementById("chat-window");
+  const msg = document.createElement("div");
+  msg.className = `message ${sender}`;
+  if (html) {
+    msg.innerHTML = text;
+  } else {
+    msg.textContent = text;
+  }
+  chatWindow.appendChild(msg);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function appendBotReply(text, modelName="") {
+  const msg = document.createElement("div");
+  msg.className = "message bot";
+
+  const statusMatch = text.match(/\[(當前階段[\s\S]*?成交指數[\s\S]*?)\]\s*$/);
+  const mainText = statusMatch ? text.slice(0, statusMatch.index).trim() : text.trim();
+
+  const main = document.createElement("div");
+  main.textContent = mainText || "(模型未提供文字)";
+  msg.appendChild(main);
+
+  if (statusMatch) {
+    const status = document.createElement("div");
+    status.className = "system-status";
+    status.textContent = `[${statusMatch[1]}]`;
+    msg.appendChild(status);
+  }
+
+  if (modelName) {
+    const note = document.createElement("div");
+    note.className = "model-note";
+    note.textContent = `使用模型：${cleanModelName(modelName)}`;
+    msg.appendChild(note);
+  }
+
+  const chatWindow = document.getElementById("chat-window");
+  chatWindow.appendChild(msg);
+  chatWindow.scrollTop = chatWindow.scrollHeight;
+}
+
+function setConnectionStatus(text, type="") {
+  const el = document.getElementById("connection-status");
+  el.className = type ? `status-${type}` : "";
+  el.textContent = text;
+}
+
+function cleanApiKey(raw) {
+  return String(raw || "")
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\s+/g, "");
+}
+
+function validateApiKey(key) {
+  if (!key) throw new Error("請先輸入 API Key。");
+  // HTTP header value must not contain non-Latin-1 control / Unicode characters.
+  for (const ch of key) {
+    if (ch.charCodeAt(0) > 255 || ch.charCodeAt(0) < 32 || ch.charCodeAt(0) === 127) {
+      throw new Error("API Key 內含不合法的全形、中文或不可見字元，請重新複製原始 Key。");
+    }
+  }
+}
+
+function apiHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "x-goog-api-key": apiKey
+  };
+}
+
+async function fetchWithTimeout(url, options={}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  try {
+    return await fetch(url, {...options, signal: controller.signal});
+  } catch (err) {
+    if (err && err.name === "AbortError") {
+      throw new Error(`請求逾時（>${REQUEST_TIMEOUT_MS/1000} 秒）`);
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function cleanModelName(name) {
+  return String(name || "").replace(/^models\//, "");
+}
+
+function isUsableTextModel(model) {
+  const name = cleanModelName(model.name).toLowerCase();
+  const methods = model.supportedGenerationMethods || [];
+
+  if (!methods.includes("generateContent")) return false;
+
+  const blocked = [
+    "embedding", "imagen", "veo", "lyria", "tts", "text-to-speech",
+    "audio", "live", "transcribe", "robotics", "computer-use",
+    "image-generation", "image-preview", "aqa"
+  ];
+  if (blocked.some(x => name.includes(x))) return false;
+
+  return name.includes("gemini");
+}
+
+function modelScore(model) {
+  const n = cleanModelName(model.name).toLowerCase();
+  let score = 0;
+
+  // Prefer normal conversational Flash models.
+  if (n.includes("flash")) score += 1000;
+  if (n.includes("flash-lite")) score -= 80;
+  if (n.includes("pro")) score += 500;
+
+  // Prefer stable/general models over preview/experimental/live variants.
+  if (n.includes("preview")) score -= 250;
+  if (n.includes("experimental") || /(^|-)exp($|-)/.test(n)) score -= 350;
+  if (n.includes("latest")) score += 60;
+
+  // Soft preference for newer version-looking names.
+  const nums = n.match(/\d+(?:\.\d+)?/g);
+  if (nums?.length) {
+    const last = Number(nums[nums.length - 1]);
+    if (Number.isFinite(last)) score += Math.min(last * 10, 100);
+  }
+  return score;
+}
+
+async function loadAvailableModels() {
+  const all = [];
+  let pageToken = "";
+
+  // Fetch all pages, capped to avoid accidental infinite pagination.
+  for (let page=0; page<10; page++) {
+    const params = new URLSearchParams({ pageSize: "1000" });
+    if (pageToken) params.set("pageToken", pageToken);
+
+    const resp = await fetchWithTimeout(`${API_BASE}/models?${params.toString()}`, {
+      method: "GET",
+      headers: apiHeaders()
+    });
+
+    const data = await safeJson(resp);
+
+    if (!resp.ok) {
+      throw makeApiError(resp, data, "讀取模型清單失敗");
+    }
+
+    if (Array.isArray(data.models)) all.push(...data.models);
+    pageToken = data.nextPageToken || "";
+    if (!pageToken) break;
+  }
+
+  const usable = all
+    .filter(isUsableTextModel)
+    .sort((a,b) => modelScore(b) - modelScore(a));
+
+  // Deduplicate model resource names.
+  const seen = new Set();
+  modelQueue = usable.filter(m => {
+    if (!m.name || seen.has(m.name)) return false;
+    seen.add(m.name);
+    return true;
+  });
+
+  if (!modelQueue.length) {
+    throw new Error("此 API Key 沒有找到可用的 Gemini 文字 generateContent 模型。");
+  }
+
+  activeModelIndex = 0;
+  return modelQueue;
+}
+
+async function safeJson(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try { return JSON.parse(text); }
+  catch { return { rawText: text }; }
+}
+
+function makeApiError(response, data, prefix="Gemini API 錯誤") {
+  const e = new Error(data?.error?.message || data?.rawText || `${response.status} ${response.statusText}`);
+  e.httpStatus = response.status;
+  e.apiStatus = data?.error?.status || "";
+  e.apiCode = data?.error?.code ?? response.status;
+  e.prefix = prefix;
+  e.details = data?.error?.details || [];
+  return e;
+}
+
+function isRetryableModelError(err) {
+  const s = Number(err?.httpStatus || err?.apiCode || 0);
+  const status = String(err?.apiStatus || "").toUpperCase();
+  const msg = String(err?.message || "").toLowerCase();
+
+  // Authentication / permission failures are project/key-wide; switching model won't fix them.
+  if (s === 401 || s === 403 || status === "UNAUTHENTICATED" || status === "PERMISSION_DENIED") {
+    return false;
+  }
+
+  // Retry/switch model for unavailable, overload, rate limits and model-specific failures.
+  if ([404, 408, 409, 429, 500, 502, 503, 504].includes(s)) return true;
+  if (["NOT_FOUND","RESOURCE_EXHAUSTED","UNAVAILABLE","DEADLINE_EXCEEDED","INTERNAL","ABORTED"].includes(status)) return true;
+  if (msg.includes("high demand") || msg.includes("overloaded") || msg.includes("try again later")) return true;
+  if (msg.includes("model") && (msg.includes("not found") || msg.includes("not supported"))) return true;
+
+  // A 400 can sometimes be model capability mismatch; allow moving on.
+  if (s === 400 && (msg.includes("model") || msg.includes("unsupported"))) return true;
+
+  return false;
+}
+
+function extractText(data) {
+  const parts = data?.candidates?.[0]?.content?.parts;
+  if (!Array.isArray(parts)) return "";
+
+  return parts
+    .filter(p => typeof p?.text === "string" && !p?.thought)
+    .map(p => p.text)
+    .join("")
+    .trim();
+}
+
+function responseDiagnostics(data) {
+  const c = data?.candidates?.[0];
+  return {
+    finishReason: c?.finishReason || "",
+    blockReason: data?.promptFeedback?.blockReason || "",
+    safetyRatings: c?.safetyRatings || []
+  };
+}
+
+async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) {
+  const url = `${API_BASE}/${modelResourceName}:generateContent`;
+
+  let response;
+  try {
+    response = await fetchWithTimeout(url, {
+      method: "POST",
+      headers: apiHeaders(),
+      body: JSON.stringify({
+        contents,
+        generationConfig: {
+          temperature: 0.9,
+          maxOutputTokens: 900,
+          ...extraConfig
         }
+      })
+    });
+  } catch (err) {
+    // Browser/network/CORS errors aren't model-specific.
+    const e = new Error(
+      `瀏覽器無法連到 Gemini API：${err.message || err}`
+    );
+    e.networkError = true;
+    throw e;
+  }
 
-        // fetch 的 HTTP header value 必須是可安全傳送的 ASCII/Latin-1。
-        // Gemini API Key 本身應為 ASCII；若仍含中文或全形符號，代表複製內容夾帶其他文字。
-        if (!/^[\x21-\x7E]+$/.test(key)) {
-            throw new Error(
-                "API Key 內含非 ASCII 字元（例如中文、全形符號或特殊不可見字元）。\n" +
-                "請只貼上 Gemini API Key 本身，不要包含『API Key：』等文字。"
-            );
-        }
+  const data = await safeJson(response);
+  if (!response.ok) throw makeApiError(response, data);
 
-        return key;
+  const text = extractText(data);
+  if (!text) {
+    const d = responseDiagnostics(data);
+    const e = new Error(
+      `Gemini 回應成功但沒有文字內容` +
+      (d.finishReason ? `；finishReason=${d.finishReason}` : "") +
+      (d.blockReason ? `；blockReason=${d.blockReason}` : "")
+    );
+    e.emptyText = true;
+    e.httpStatus = 200;
+    throw e;
+  }
+
+  return { text, data };
+}
+
+async function generateWithFailover(contents, purpose="生成回覆") {
+  if (!modelQueue.length) throw new Error("尚未載入可用模型。");
+
+  const attempts = [];
+  const start = activeModelIndex;
+
+  // Try every candidate at most once for this request.
+  for (let offset=0; offset<modelQueue.length; offset++) {
+    const idx = (start + offset) % modelQueue.length;
+    const model = modelQueue[idx];
+    const modelName = cleanModelName(model.name);
+
+    setConnectionStatus(
+      `${purpose}：正在嘗試 ${modelName}${offset ? `（已自動切換第 ${offset+1} 個模型）` : ""}…`,
+      offset ? "warn" : ""
+    );
+
+    try {
+      const result = await callGenerateOnModel(model.name, contents);
+      activeModelIndex = idx;
+      setConnectionStatus(`Gemini 已連線｜目前模型：${modelName}`, "ok");
+      return {...result, model: model.name};
+    } catch (err) {
+      attempts.push({ model: modelName, err });
+
+      if (err.networkError) throw err;
+
+      const retryable = err.emptyText || isRetryableModelError(err);
+      if (!retryable) {
+        err.attempts = attempts;
+        throw err;
+      }
+
+      // Move immediately to next model on 503/429/404/5xx/empty output.
+      continue;
     }
-
-    function buildSystemInstruction(scenario) {
-        return `
-        你現在是一個「互動式成交訓練模擬器」。你要扮演本回合的真實感潛在客戶，與使用者進行銷售對話演練。
-
-        【本回合情境】
-        客戶姓名：${scenario.customerName}
-        客戶身份：${scenario.customerRole}
-        所在情境：${scenario.context}
-        想解決的問題：${scenario.need}
-        顧慮／阻力：${scenario.concerns.join("、")}
-        預算／資源限制：${scenario.constraints}
-        決策狀態：${scenario.decisionState}
-
-        【情緒階段】
-        對話必須依互動品質自然經歷：1.防備 -> 2.觀望 -> 3.開放 -> 4.共鳴 -> 5.興奮 -> 6.猶豫 -> 7.確定。
-        不可因為學員只講一兩句就快速跳級；若學員答非所問、過度推銷、給壓力或忽略客戶疑慮，應停留或下降。
-
-        【評判標準：G.O.O.D. 模型】
-        學員的每一句話，你要評估是否真誠(Genuine)、給予開放安全感(Open)、觀察到情緒(Observe)，以及是否適度引導對話。
-
-        【真實對話規則】
-        1. 你必須像真實客戶，不要像考官。問題、反問、猶豫與情緒要符合本回合情境。
-        2. 每次只說 1～3 句，避免長篇說教。
-        3. 不得每回合重複相同問題、相同措辭或固定台詞；第6階段的猶豫也必須依本情境自然生成。
-        4. 不要主動告訴學員「正確答案」。只有當學員真的卡住、方向明顯錯誤或已完成回合時，才給必要提示。
-        5. 每次回覆最後一行固定標註：[當前階段：XXX / 成交指數：X/100]
-        6. 達到第7階段後，跳出角色，依 G.O.O.D. 模型給具體復盤、做得好的地方、可改善處與最終評分。
-        7. 情境要維持一致，不可中途改變客戶身份、預算、需求或已說過的重要事實。
-        `;
-    }
-
-    let chatHistory = [];
-    let apiKey = "";
-    let modelCandidates = [];
-    let selectedModel = "";
-
-    function escapeHtml(value) {
-        return String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    function appendMessage(sender, text, allowStatusFormatting = false) {
-        const chatWindow = document.getElementById("chat-window");
-        const msgDiv = document.createElement("div");
-        msgDiv.className = `message ${sender}`;
-
-        let safeText = escapeHtml(text).replace(/\n/g, "<br>");
-        if (allowStatusFormatting) {
-            safeText = safeText.replace(
-                /\[(當前階段.*?成交指數.*?)\]/g,
-                "<div class='system-status'>[$1]</div>"
-            );
-        }
-
-        msgDiv.innerHTML = safeText;
-        chatWindow.appendChild(msgDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    }
-
-    function appendError(title, detail) {
-        const chatWindow = document.getElementById("chat-window");
-        const msgDiv = document.createElement("div");
-        msgDiv.className = "message bot";
-
-        const titleDiv = document.createElement("div");
-        titleDiv.textContent = title;
-        msgDiv.appendChild(titleDiv);
-
-        if (detail) {
-            const detailDiv = document.createElement("div");
-            detailDiv.className = "error-detail";
-            detailDiv.textContent = detail;
-            msgDiv.appendChild(detailDiv);
-        }
-
-        chatWindow.appendChild(msgDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight;
-    }
-
-    function setConnectionStatus(text, state = "") {
-        const el = document.getElementById("connection-status");
-        el.textContent = text;
-        el.className = state;
-    }
-
-    async function readJsonSafely(response) {
-        const raw = await response.text();
-        if (!raw) return {};
-        try {
-            return JSON.parse(raw);
-        } catch (_) {
-            return { raw };
-        }
-    }
-
-    function formatApiError(response, data) {
-        const apiError = data?.error || {};
-        const pieces = [
-            `HTTP ${response.status} ${response.statusText}`.trim(),
-            apiError.status ? `狀態：${apiError.status}` : "",
-            apiError.message ? `訊息：${apiError.message}` : "",
-            apiError.code ? `代碼：${apiError.code}` : ""
-        ].filter(Boolean);
-
-        if (!apiError.message && data?.raw) {
-            pieces.push(`回應：${data.raw.slice(0, 800)}`);
-        }
-
-        return pieces.join("\n");
-    }
-
-    async function fetchAllModels() {
-        const allModels = [];
-        let pageToken = "";
-
-        do {
-            const url = new URL(`${GEMINI_API_BASE}/models`);
-            url.searchParams.set("pageSize", "1000");
-            if (pageToken) url.searchParams.set("pageToken", pageToken);
-
-            let response;
-            try {
-                response = await fetch(url.toString(), {
-                    method: "GET",
-                    headers: { "x-goog-api-key": apiKey }
-                });
-            } catch (networkError) {
-                const msg = networkError?.message || String(networkError);
-                if (/headers|ISO-8859-1|ByteString/i.test(msg)) {
-                    throw new Error(
-                        "瀏覽器拒絕建立請求：HTTP header 含有不合法字元。\n" +
-                        "系統已清理 API Key 常見的空白與不可見字元；若仍發生，請重新從 Google AI Studio 複製純 API Key。\n" +
-                        `原始錯誤：${msg}`
-                    );
-                }
-                throw new Error(
-                    "瀏覽器無法連到 Gemini API。可能是網路、瀏覽器擴充功能、防火牆或 DNS 問題。\n" +
-                    `原始錯誤：${msg}`
-                );
-            }
-
-            const data = await readJsonSafely(response);
-            if (!response.ok) {
-                throw new Error(formatApiError(response, data));
-            }
-
-            allModels.push(...(data.models || []));
-            pageToken = data.nextPageToken || "";
-        } while (pageToken);
-
-        return allModels;
-    }
-
-    function parseVersionTuple(name) {
-        const lower = name.toLowerCase();
-        const match = lower.match(/gemini-(\d+)(?:\.(\d+))?(?:\.(\d+))?/);
-        return match
-            ? [Number(match[1] || 0), Number(match[2] || 0), Number(match[3] || 0)]
-            : [0, 0, 0];
-    }
-
-    function compareVersionTuple(a, b) {
-        for (let i = 0; i < Math.max(a.length, b.length); i++) {
-            const diff = (b[i] || 0) - (a[i] || 0);
-            if (diff !== 0) return diff;
-        }
-        return 0;
-    }
-
-    function modelTier(model) {
-        const name = model.name.toLowerCase();
-        const isPreview = /preview|experimental|\bexp\b/.test(name);
-        const isFlash = name.includes("flash");
-        const isPro = name.includes("pro");
-        const isLite = name.includes("lite");
-
-        // 優先：穩定 Flash > 穩定 Flash-Lite > 穩定 Pro > Preview Flash > 其他。
-        // 同一類別再用模型名稱中的版本號由新到舊排列。
-        if (!isPreview && isFlash && !isLite) return 0;
-        if (!isPreview && isFlash && isLite) return 1;
-        if (!isPreview && isPro) return 2;
-        if (isPreview && isFlash) return 3;
-        if (!isPreview) return 4;
-        return 5;
-    }
-
-    function buildModelCandidates(models) {
-        const unusableNamePattern = /(image|tts|live|audio|transcribe|embedding|robotics|omni|veo|imagen|lyria)/i;
-
-        const usable = models.filter(model => {
-            if (typeof model?.name !== "string") return false;
-            if (!model.name.startsWith("models/")) return false;
-            if (!Array.isArray(model.supportedGenerationMethods)) return false;
-            if (!model.supportedGenerationMethods.includes("generateContent")) return false;
-            if (!model.name.toLowerCase().includes("gemini")) return false;
-
-            // models.list 也可能列出圖片、TTS、Live、轉錄等可呼叫 generateContent 的模型。
-            // 這個網站只需要「文字輸出」，因此排除非純文字對話模型。
-            if (unusableNamePattern.test(model.name)) return false;
-
-            return true;
-        });
-
-        usable.sort((a, b) => {
-            const tierDiff = modelTier(a) - modelTier(b);
-            if (tierDiff !== 0) return tierDiff;
-
-            const versionDiff = compareVersionTuple(
-                parseVersionTuple(a.name),
-                parseVersionTuple(b.name)
-            );
-            if (versionDiff !== 0) return versionDiff;
-
-            return b.name.localeCompare(a.name);
-        });
-
-        // REST generateContent 路徑直接使用 models.list 回傳的完整 resource name。
-        return usable.map(model => model.name);
-    }
-
-    async function initializeModel() {
-        setConnectionStatus("正在驗證 API Key 並讀取可用 Gemini 模型…", "loading");
-        const models = await fetchAllModels();
-        modelCandidates = buildModelCandidates(models);
-
-        if (modelCandidates.length === 0) {
-            throw new Error("API Key 驗證成功，但找不到支援 generateContent 的 Gemini 模型。");
-        }
-
-        selectedModel = modelCandidates[0];
-        setConnectionStatus(
-            `已取得 ${modelCandidates.length} 個可用候選模型；目前選用 ${selectedModel.replace("models/", "")}`,
-            "ok"
-        );
-    }
-
-    async function callGemini(contents) {
-        if (!modelCandidates.length) {
-            throw new Error("尚未取得可用模型清單，請重新按「開始訓練」。");
-        }
-
-        let lastError = null;
-
-        // 若 models.list 列出的第一個模型實際生成時已失效，遇到 NOT_FOUND / 404 時自動改試下一個。
-        for (const modelName of modelCandidates) {
-            selectedModel = modelName;
-            const endpoint = `${GEMINI_API_BASE}/${modelName}:generateContent`;
-
-            let response;
-            try {
-                response = await fetch(endpoint, {
-                    method: "POST",
-                    // Header 名稱與固定值皆為 ASCII；API Key 已在 startTraining() 清理與驗證。
-                    headers: {
-                        "Content-Type": "application/json",
-                        "x-goog-api-key": apiKey
-                    },
-                    body: JSON.stringify({ contents })
-                });
-            } catch (networkError) {
-                const msg = networkError?.message || String(networkError);
-                if (/headers|ISO-8859-1|ByteString/i.test(msg)) {
-                    throw new Error(
-                        "瀏覽器拒絕建立 Gemini 請求：HTTP header 含有不合法字元。\n" +
-                        "請重新貼上純 Gemini API Key，不要包含中文標籤、全形符號或其他說明文字。\n" +
-                        `原始錯誤：${msg}`
-                    );
-                }
-                throw new Error(
-                    "Gemini API 網路連線失敗。\n" +
-                    `原始錯誤：${msg}`
-                );
-            }
-
-            const data = await readJsonSafely(response);
-
-            if (response.ok) {
-                const parts = data?.candidates?.[0]?.content?.parts || [];
-
-                // Gemini 新模型可能回傳 thought、音訊、圖片等 part。
-                // 本訓練器只取「非 thought 的文字答案」。
-                const reply = parts
-                    .filter(part => part?.text && part?.thought !== true)
-                    .map(part => part.text)
-                    .join("")
-                    .trim();
-
-                if (reply) {
-                    setConnectionStatus(
-                        `已連線：${selectedModel.replace("models/", "")}`,
-                        "ok"
-                    );
-                    return reply;
-                }
-
-                // HTTP 200 + finishReason=STOP 並不保證有文字；
-                // 例如 TTS / 圖像 / 其他模態模型可能只回傳非文字內容。
-                // 不把這當成 API Key 錯誤，而是自動換下一個候選文字模型。
-                const finishReason = data?.candidates?.[0]?.finishReason || "未知";
-                const partTypes = parts.map(part => {
-                    if (part?.text) return part?.thought ? "thought-text" : "text";
-                    if (part?.inlineData) return "inlineData";
-                    if (part?.fileData) return "fileData";
-                    return "other";
-                }).join(", ") || "none";
-
-                lastError = new Error(
-                    `${modelName} 回應成功但沒有可顯示的文字。` +
-                    ` finishReason=${finishReason}; parts=${partTypes}`
-                );
-
-                console.warn(
-                    `模型 ${modelName} 沒有回傳一般文字內容，改試下一個候選模型。`,
-                    data
-                );
-                continue;
-            }
-
-            const detail = formatApiError(response, data);
-            lastError = new Error(`${modelName}\n${detail}`);
-
-            const apiStatus = data?.error?.status || "";
-            const modelUnavailable = response.status === 404 || apiStatus === "NOT_FOUND";
-
-            if (modelUnavailable) {
-                console.warn(`模型 ${modelName} 不可用，改試下一個候選模型。`, data);
-                continue;
-            }
-
-            // 非模型不存在的錯誤（例如 400、401、403、429）通常不應盲目輪詢所有模型。
-            throw lastError;
-        }
-
-        throw lastError || new Error("沒有任何候選模型可以完成 generateContent。 ");
-    }
-
-    function makeRandomSeed() {
-        try {
-            const values = new Uint32Array(4);
-            crypto.getRandomValues(values);
-            return Array.from(values).map(v => v.toString(16)).join("-");
-        } catch (_) {
-            return `${Date.now()}-${Math.random()}-${Math.random()}`;
-        }
-    }
-
-    function getRecentScenarioSignatures() {
-        try {
-            return JSON.parse(sessionStorage.getItem("recentSalesScenarios") || "[]");
-        } catch (_) {
-            return [];
-        }
-    }
-
-    function saveScenarioSignature(signature) {
-        try {
-            const recent = getRecentScenarioSignatures();
-            const next = [signature, ...recent.filter(x => x !== signature)].slice(0, 8);
-            sessionStorage.setItem("recentSalesScenarios", JSON.stringify(next));
-        } catch (_) {}
-    }
-
-    function parseScenarioJson(text) {
-        const cleaned = String(text)
-            .replace(/^```(?:json)?\s*/i, "")
-            .replace(/```\s*$/i, "")
-            .trim();
-
-        const firstBrace = cleaned.indexOf("{");
-        const lastBrace = cleaned.lastIndexOf("}");
-        const jsonText = firstBrace >= 0 && lastBrace > firstBrace
-            ? cleaned.slice(firstBrace, lastBrace + 1)
-            : cleaned;
-
-        const obj = JSON.parse(jsonText);
-        const requiredStrings = [
-            "customerName", "customerRole", "context", "need",
-            "constraints", "decisionState", "openingLine", "signature"
-        ];
-
-        for (const key of requiredStrings) {
-            if (!obj[key] || typeof obj[key] !== "string") {
-                throw new Error(`隨機情境缺少欄位：${key}`);
-            }
-        }
-
-        if (!Array.isArray(obj.concerns) || obj.concerns.length < 1) {
-            throw new Error("隨機情境缺少 concerns");
-        }
-
-        return obj;
-    }
-
-    async function generateRandomScenario() {
-        const seed = makeRandomSeed();
-        const recent = getRecentScenarioSignatures();
-        const prompt = `
-你是銷售訓練情境設計器。請產生一個「高度貼近真實工作與消費決策」的隨機成交對話情境。
+  }
+
+  const e = new Error("所有候選 Gemini 文字模型都嘗試過，但目前都無法成功產生文字。");
+  e.attempts = attempts;
+  throw e;
+}
+
+function randomSeed() {
+  if (window.crypto?.getRandomValues) {
+    const a = new Uint32Array(2);
+    crypto.getRandomValues(a);
+    return `${a[0]}-${a[1]}-${Date.now()}`;
+  }
+  return `${Math.random()}-${Date.now()}`;
+}
+
+async function createRandomScenario() {
+  const seed = randomSeed();
+  const avoid = recentScenarioHints.length
+    ? `最近已出現過的情境摘要如下，請避免重複：\n- ${recentScenarioHints.join("\n- ")}`
+    : "目前沒有需避開的既有情境。";
+
+  const prompt = `
+${systemInstruction}
+
+現在先建立一個全新的、具體、合理、像真實世界會發生的成交情境。
+隨機種子：${seed}
 
 要求：
-- 每次情境都要明顯不同，不可套用固定的「創業課」題型。
-- 可涵蓋 B2C 或 B2B，例如：課程、顧問、軟體/SaaS、行銷服務、設計服務、健身/教練、教育、企業採購、會員服務、專業服務、電商方案等。
-- 客戶要有具體身份、需求、過往經驗、限制與真實顧慮；不要只寫抽象人格。
-- 開場問題要像真人會講的話，有口語感，可以質疑、反問、比較、擔心價格、時間、效果、風險、內部決策等。
-- 不得使用名人或暗示這是真實存在的特定私人個人；人名用一般虛構名字即可。
-- openingLine 必須直接由客戶對學員說話，1～2 句，不能包含答案提示。
-- 不要固定寫「又是創業課」或任何固定句型。
-- 避免和 recentSignatures 中最近情境過度相似。
+1. 每次都要改變產業、產品/服務、價格敏感度、客戶身份、決策權、需求與顧慮。
+2. 可以是 B2B 或 B2C，但必須有現實中的購買阻力，而不是故意刁難。
+3. 不要使用「創業課」作為預設題目；除非本次隨機情境剛好合理抽到。
+4. 第一輪直接以客戶身份說話，不要解釋你建立了什麼情境。
+5. 開場要讓學員能透過提問逐步發現背景，不要一次把所有資訊講完。
+6. 客戶的第一句應有明確疑慮或防備，但要自然。
+7. 最後必須加：[當前階段：防備 / 成交指數：5/100]
+8. 在回覆最後另起一行，用「<!--SCENARIO: ... -->」寫一句不超過 80 字的內部情境摘要，供系統維持一致性；摘要不要出現在客戶對話中。
 
-本次隨機種子：${seed}
-recentSignatures：${JSON.stringify(recent)}
+${avoid}
+`;
 
-只輸出合法 JSON，不要 markdown，不要解釋：
-{
-  "customerName": "客戶名字",
-  "customerRole": "身份/職業/決策角色",
-  "context": "目前正在考慮購買什麼，以及背景",
-  "need": "真正想解決的問題",
-  "concerns": ["顧慮1", "顧慮2", "顧慮3"],
-  "constraints": "預算、時間、內部流程或其他限制",
-  "decisionState": "目前決策狀態",
-  "openingLine": "第一句真實口語問題",
-  "signature": "用10~30字摘要此情境，供避免重複"
-}`;
+  const result = await generateWithFailover(
+    [{ role:"user", parts:[{text:prompt}] }],
+    "建立隨機情境"
+  );
 
-        const raw = await callGemini([
-            { role: "user", parts: [{ text: prompt }] }
-        ]);
+  const scenarioMatch = result.text.match(/<!--SCENARIO:\s*([\s\S]*?)\s*-->/i);
+  scenarioSummary = scenarioMatch ? scenarioMatch[1].trim() : "";
+  let visible = result.text.replace(/<!--SCENARIO:[\s\S]*?-->/ig, "").trim();
 
-        const scenario = parseScenarioJson(raw);
-        saveScenarioSignature(scenario.signature);
-        return scenario;
-    }
+  if (scenarioSummary) {
+    recentScenarioHints.unshift(scenarioSummary);
+    recentScenarioHints = recentScenarioHints.slice(0, 6);
+  }
 
-    async function startTraining() {
-        const startBtn = document.getElementById("start-btn");
-        const apiInput = document.getElementById("api-key");
-        const userInput = document.getElementById("user-input");
-        const sendBtn = document.getElementById("send-btn");
+  chatHistory = [
+    {
+      role:"user",
+      parts:[{
+        text:
+`${systemInstruction}
 
-        try {
-            apiKey = sanitizeApiKey(apiInput.value);
-            // 同步回輸入框，移除複製時常見的空白、換行與不可見字元。
-            apiInput.value = apiKey;
-        } catch (keyError) {
-            setConnectionStatus("API Key 格式有問題", "error");
-            appendError("無法開始訓練：", keyError.message);
-            apiInput.focus();
-            return;
-        }
+本次固定情境摘要：
+${scenarioSummary || "請完全依照你剛建立的客戶情境維持一致性。"}
 
-        startBtn.disabled = true;
-        apiInput.disabled = true;
-        userInput.disabled = true;
-        sendBtn.disabled = true;
+以下是你剛才對學員說的第一句，之後請延續同一角色與同一情境：
+${visible}`
+      }]
+    },
+    { role:"model", parts:[{text:visible}] }
+  ];
 
-        try {
-            await initializeModel();
+  return { text: visible, model: result.model };
+}
 
-            setConnectionStatus(
-                `已連線：${selectedModel.replace("models/", "")}；正在生成本回合隨機情境…`,
-                "loading"
-            );
+function formatError(err) {
+  if (err?.attempts?.length) {
+    const lines = err.attempts.map((a,i) => {
+      const e = a.err || {};
+      const bits = [];
+      if (e.httpStatus) bits.push(`HTTP ${e.httpStatus}`);
+      if (e.apiStatus) bits.push(e.apiStatus);
+      bits.push(e.message || "未知錯誤");
+      return `${i+1}. ${a.model} → ${bits.join("｜")}`;
+    });
+    return `${err.message}\n\n模型切換紀錄：\n${lines.join("\n")}`;
+  }
 
-            const scenario = await generateRandomScenario();
-            const systemInstruction = buildSystemInstruction(scenario);
-            const opening = `${scenario.openingLine} [當前階段：防備 / 成交指數：5/100]`;
+  const bits = [];
+  if (err?.httpStatus) bits.push(`HTTP ${err.httpStatus}`);
+  if (err?.apiStatus) bits.push(`狀態：${err.apiStatus}`);
+  if (err?.message) bits.push(`訊息：${err.message}`);
+  return bits.length ? bits.join("\n") : String(err);
+}
 
-            chatHistory = [{
-                role: "user",
-                parts: [{
-                    text: systemInstruction +
-                        `\n\n現在開始演練。你的第一句已經是：${scenario.openingLine}。接下來請持續以此客戶身份回應。`
-                }]
-            }];
-            chatHistory.push({ role: "model", parts: [{ text: opening }] });
+async function startTraining() {
+  const startBtn = document.getElementById("start-btn");
+  const keyInput = document.getElementById("api-key");
+  const userInput = document.getElementById("user-input");
+  const sendBtn = document.getElementById("send-btn");
 
-            appendMessage("bot", opening, true);
-            setConnectionStatus(
-                `已連線：${selectedModel.replace("models/", "")}；本回合題目已隨機生成`,
-                "ok"
-            );
+  try {
+    apiKey = cleanApiKey(keyInput.value);
+    validateApiKey(apiKey);
 
-            userInput.disabled = false;
-            sendBtn.disabled = false;
-            userInput.focus();
-        } catch (error) {
-            console.error(error);
-            setConnectionStatus("Gemini 連線失敗", "error");
-            appendError("無法開始訓練。以下是真實錯誤資訊：", error.message);
+    startBtn.disabled = true;
+    userInput.disabled = true;
+    sendBtn.disabled = true;
 
-            apiInput.disabled = false;
-            startBtn.disabled = false;
-            apiInput.focus();
-        }
-    }
+    setConnectionStatus("正在取得 Gemini 可用模型清單…");
 
-    async function sendMessage() {
-        const inputField = document.getElementById("user-input");
-        const sendBtn = document.getElementById("send-btn");
-        const text = inputField.value.trim();
-        if (!text || inputField.disabled) return;
+    const models = await loadAvailableModels();
+    setConnectionStatus(`找到 ${models.length} 個候選文字模型，正在建立隨機情境…`);
 
-        appendMessage("user", text);
-        inputField.value = "";
-        inputField.disabled = true;
-        sendBtn.disabled = true;
+    const scenario = await createRandomScenario();
 
-        chatHistory.push({ role: "user", parts: [{ text }] });
+    keyInput.disabled = true;
+    userInput.disabled = false;
+    sendBtn.disabled = false;
+    userInput.focus();
 
-        try {
-            const reply = await callGemini(chatHistory);
-            appendMessage("bot", reply, true);
-            chatHistory.push({ role: "model", parts: [{ text: reply }] });
-        } catch (error) {
-            console.error(error);
-            setConnectionStatus("Gemini API 呼叫失敗", "error");
-            appendError("Gemini API 呼叫失敗。以下是真實錯誤資訊：", error.message);
+    appendBotReply(scenario.text, scenario.model);
+  } catch (err) {
+    startBtn.disabled = false;
+    keyInput.disabled = false;
+    setConnectionStatus("Gemini 連線失敗", "error");
 
-            // 失敗的 user 訊息仍保留在畫面，但從 API 對話歷史移除，避免重送時重複。
-            if (chatHistory.at(-1)?.role === "user") {
-                chatHistory.pop();
-            }
-        } finally {
-            inputField.disabled = false;
-            sendBtn.disabled = false;
-            inputField.focus();
-        }
-    }
+    appendMessage(
+      "bot",
+      `無法開始訓練。以下是真實錯誤資訊：\n\n${formatError(err)}`
+    );
+  }
+}
+
+async function sendMessage() {
+  const input = document.getElementById("user-input");
+  const sendBtn = document.getElementById("send-btn");
+  const text = input.value.trim();
+  if (!text) return;
+
+  appendMessage("user", text);
+  input.value = "";
+  input.disabled = true;
+  sendBtn.disabled = true;
+
+  chatHistory.push({ role:"user", parts:[{text}] });
+
+  try {
+    const result = await generateWithFailover(chatHistory, "產生客戶回覆");
+    appendBotReply(result.text, result.model);
+    chatHistory.push({ role:"model", parts:[{text:result.text}] });
+  } catch (err) {
+    // Remove the failed user turn from model context so resending doesn't duplicate it.
+    chatHistory.pop();
+    appendMessage(
+      "bot",
+      `本次回覆失敗。\n\n${formatError(err)}`
+    );
+    setConnectionStatus("本次 Gemini 呼叫失敗", "error");
+  } finally {
+    input.disabled = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
 </script>
-
 </body>
 </html>
