@@ -65,6 +65,31 @@
 <script>
     const GEMINI_API_BASE = "https://generativelanguage.googleapis.com/v1beta";
 
+    function sanitizeApiKey(raw) {
+        let key = String(raw || "")
+            .trim()
+            .replace(/[\u200B-\u200D\uFEFF]/g, "")
+            .replace(/[\r\n\t ]+/g, "");
+
+        // 使用者從文件/聊天工具複製時，有時會一起帶入引號。
+        key = key.replace(/^["'`]+|["'`]+$/g, "");
+
+        if (!key) {
+            throw new Error("API Key 為空白。請重新貼上 Gemini API Key。");
+        }
+
+        // fetch 的 HTTP header value 必須是可安全傳送的 ASCII/Latin-1。
+        // Gemini API Key 本身應為 ASCII；若仍含中文或全形符號，代表複製內容夾帶其他文字。
+        if (!/^[\x21-\x7E]+$/.test(key)) {
+            throw new Error(
+                "API Key 內含非 ASCII 字元（例如中文、全形符號或特殊不可見字元）。\n" +
+                "請只貼上 Gemini API Key 本身，不要包含『API Key：』等文字。"
+            );
+        }
+
+        return key;
+    }
+
     function buildSystemInstruction(scenario) {
         return `
         你現在是一個「互動式成交訓練模擬器」。你要扮演本回合的真實感潛在客戶，與使用者進行銷售對話演練。
@@ -196,9 +221,17 @@
                     headers: { "x-goog-api-key": apiKey }
                 });
             } catch (networkError) {
+                const msg = networkError?.message || String(networkError);
+                if (/headers|ISO-8859-1|ByteString/i.test(msg)) {
+                    throw new Error(
+                        "瀏覽器拒絕建立請求：HTTP header 含有不合法字元。\n" +
+                        "系統已清理 API Key 常見的空白與不可見字元；若仍發生，請重新從 Google AI Studio 複製純 API Key。\n" +
+                        `原始錯誤：${msg}`
+                    );
+                }
                 throw new Error(
-                    "瀏覽器無法連到 Gemini API。可能是網路、瀏覽器擴充功能、CORS/防火牆或 DNS 問題。\n" +
-                    `原始錯誤：${networkError.message}`
+                    "瀏覽器無法連到 Gemini API。可能是網路、瀏覽器擴充功能、防火牆或 DNS 問題。\n" +
+                    `原始錯誤：${msg}`
                 );
             }
 
@@ -313,6 +346,7 @@
             try {
                 response = await fetch(endpoint, {
                     method: "POST",
+                    // Header 名稱與固定值皆為 ASCII；API Key 已在 startTraining() 清理與驗證。
                     headers: {
                         "Content-Type": "application/json",
                         "x-goog-api-key": apiKey
@@ -320,9 +354,17 @@
                     body: JSON.stringify({ contents })
                 });
             } catch (networkError) {
+                const msg = networkError?.message || String(networkError);
+                if (/headers|ISO-8859-1|ByteString/i.test(msg)) {
+                    throw new Error(
+                        "瀏覽器拒絕建立 Gemini 請求：HTTP header 含有不合法字元。\n" +
+                        "請重新貼上純 Gemini API Key，不要包含中文標籤、全形符號或其他說明文字。\n" +
+                        `原始錯誤：${msg}`
+                    );
+                }
                 throw new Error(
                     "Gemini API 網路連線失敗。\n" +
-                    `原始錯誤：${networkError.message}`
+                    `原始錯誤：${msg}`
                 );
             }
 
@@ -492,9 +534,14 @@ recentSignatures：${JSON.stringify(recent)}
         const userInput = document.getElementById("user-input");
         const sendBtn = document.getElementById("send-btn");
 
-        apiKey = apiInput.value.trim();
-        if (!apiKey) {
-            alert("請先輸入 API Key！");
+        try {
+            apiKey = sanitizeApiKey(apiInput.value);
+            // 同步回輸入框，移除複製時常見的空白、換行與不可見字元。
+            apiInput.value = apiKey;
+        } catch (keyError) {
+            setConnectionStatus("API Key 格式有問題", "error");
+            appendError("無法開始訓練：", keyError.message);
+            apiInput.focus();
             return;
         }
 
