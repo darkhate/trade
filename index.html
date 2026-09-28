@@ -142,6 +142,8 @@ Direction：能循序引導，而不是急著推銷。
 - 學員有同理、探索需求、釐清問題、降低風險時，才逐步推進。
 - 客戶不能每句都稱讚學員，要像真實客戶一樣有自己的立場。
 - 每次只回應一個主要想法，避免一次丟出太多問題。
+- 每次客戶回覆限制在 2～4 句、約 60～180 個中文字；不要寫肢體動作、舞台描述、內心旁白或括號敘事，只輸出客戶真正會說出口的話。
+- 回覆必須是完整句子，不可以在句子中途停止。
 - 每次回覆最後都加上：[當前階段：XXX / 成交指數：X/100]
 - 進入第 6 階段時，要根據此客戶的實際情境提出真實的最後疑慮，不要使用固定句型。
 - 只有真正達到第 7 階段才跳出角色，提供 G.O.O.D. 模型復盤與最終評分。
@@ -386,6 +388,23 @@ function responseDiagnostics(data) {
   };
 }
 
+function thinkingConfigForModel(modelResourceName) {
+  const n = cleanModelName(modelResourceName).toLowerCase();
+
+  // 對這種短篇角色對話不需要大量推理。2.5 Flash 可直接關閉 thinking，
+  // 避免 thinking token 吃掉 maxOutputTokens，導致可見文字被截斷。
+  if (n.includes("2.5-flash")) {
+    return { thinkingBudget: 0 };
+  }
+
+  // Gemini 3.x 使用 thinkingLevel；LOW 足以處理銷售角色對話，也能保留輸出空間。
+  if (/gemini-3(?:\\.|-|$)/.test(n) || /gemini-3\\./.test(n)) {
+    return { thinkingLevel: "LOW" };
+  }
+
+  return null;
+}
+
 async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) {
   const url = `${API_BASE}/${modelResourceName}:generateContent`;
 
@@ -398,7 +417,10 @@ async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) 
         contents,
         generationConfig: {
           temperature: 0.9,
-          maxOutputTokens: 900,
+          maxOutputTokens: 4096,
+          ...(thinkingConfigForModel(modelResourceName)
+              ? { thinkingConfig: thinkingConfigForModel(modelResourceName) }
+              : {}),
           ...extraConfig
         }
       })
@@ -418,15 +440,35 @@ async function callGenerateOnModel(modelResourceName, contents, extraConfig={}) 
   const data = await safeJson(response);
   if (!response.ok) throw makeApiError(response, data);
 
+  const d = responseDiagnostics(data);
+
+  // 不接受已被硬性截斷的回答。讓 failover 改試下一個模型，
+  // 而不是把半句話顯示給使用者。
+  if (d.finishReason === "MAX_TOKENS") {
+    const e = new Error("模型輸出達到 token 上限，回覆可能被截斷；自動切換下一個模型");
+    e.truncated = true;
+    e.httpStatus = 200;
+    throw e;
+  }
+
   const text = extractText(data);
   if (!text) {
-    const d = responseDiagnostics(data);
     const e = new Error(
       `Gemini 回應成功但沒有文字內容` +
       (d.finishReason ? `；finishReason=${d.finishReason}` : "") +
       (d.blockReason ? `；blockReason=${d.blockReason}` : "")
     );
     e.emptyText = true;
+    e.httpStatus = 200;
+    throw e;
+  }
+
+  // 角色回覆必須包含完整的階段標記；沒有標記通常代表格式未完成。
+  // 這種情況也不直接顯示殘缺內容，而是交給下一個可用模型。
+  const hasStatus = /\[當前階段：[^\]]+\/\s*成交指數：\s*\d+\s*\/\s*100\]/.test(text);
+  if (!hasStatus) {
+    const e = new Error(`模型回覆格式不完整${d.finishReason ? `；finishReason=${d.finishReason}` : ""}；自動切換下一個模型`);
+    e.incompleteReply = true;
     e.httpStatus = 200;
     throw e;
   }
