@@ -248,13 +248,21 @@
     }
 
     function buildModelCandidates(models) {
-        const usable = models.filter(model =>
-            typeof model?.name === "string" &&
-            model.name.startsWith("models/") &&
-            Array.isArray(model.supportedGenerationMethods) &&
-            model.supportedGenerationMethods.includes("generateContent") &&
-            model.name.toLowerCase().includes("gemini")
-        );
+        const unusableNamePattern = /(image|tts|live|audio|transcribe|embedding|robotics|omni|veo|imagen|lyria)/i;
+
+        const usable = models.filter(model => {
+            if (typeof model?.name !== "string") return false;
+            if (!model.name.startsWith("models/")) return false;
+            if (!Array.isArray(model.supportedGenerationMethods)) return false;
+            if (!model.supportedGenerationMethods.includes("generateContent")) return false;
+            if (!model.name.toLowerCase().includes("gemini")) return false;
+
+            // models.list 也可能列出圖片、TTS、Live、轉錄等可呼叫 generateContent 的模型。
+            // 這個網站只需要「文字輸出」，因此排除非純文字對話模型。
+            if (unusableNamePattern.test(model.name)) return false;
+
+            return true;
+        });
 
         usable.sort((a, b) => {
             const tierDiff = modelTier(a) - modelTier(b);
@@ -321,21 +329,45 @@
             const data = await readJsonSafely(response);
 
             if (response.ok) {
-                const reply = data?.candidates?.[0]?.content?.parts
-                    ?.map(part => part?.text || "")
+                const parts = data?.candidates?.[0]?.content?.parts || [];
+
+                // Gemini 新模型可能回傳 thought、音訊、圖片等 part。
+                // 本訓練器只取「非 thought 的文字答案」。
+                const reply = parts
+                    .filter(part => part?.text && part?.thought !== true)
+                    .map(part => part.text)
                     .join("")
                     .trim();
 
-                if (!reply) {
-                    const finishReason = data?.candidates?.[0]?.finishReason || "未知";
-                    throw new Error(`Gemini 回應成功，但沒有文字內容。finishReason=${finishReason}`);
+                if (reply) {
+                    setConnectionStatus(
+                        `已連線：${selectedModel.replace("models/", "")}`,
+                        "ok"
+                    );
+                    return reply;
                 }
 
-                setConnectionStatus(
-                    `已連線：${selectedModel.replace("models/", "")}`,
-                    "ok"
+                // HTTP 200 + finishReason=STOP 並不保證有文字；
+                // 例如 TTS / 圖像 / 其他模態模型可能只回傳非文字內容。
+                // 不把這當成 API Key 錯誤，而是自動換下一個候選文字模型。
+                const finishReason = data?.candidates?.[0]?.finishReason || "未知";
+                const partTypes = parts.map(part => {
+                    if (part?.text) return part?.thought ? "thought-text" : "text";
+                    if (part?.inlineData) return "inlineData";
+                    if (part?.fileData) return "fileData";
+                    return "other";
+                }).join(", ") || "none";
+
+                lastError = new Error(
+                    `${modelName} 回應成功但沒有可顯示的文字。` +
+                    ` finishReason=${finishReason}; parts=${partTypes}`
                 );
-                return reply;
+
+                console.warn(
+                    `模型 ${modelName} 沒有回傳一般文字內容，改試下一個候選模型。`,
+                    data
+                );
+                continue;
             }
 
             const detail = formatApiError(response, data);
